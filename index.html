@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; media-src 'self' blob:; worker-src 'self'; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <title>Screen Recorder</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='2' y='5' width='28' height='20' rx='4' fill='%23334'/%3E%3Ccircle cx='16' cy='15' r='5' fill='%23e5484d'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="styles.css">
+  <script src="src/boot.js"></script>
+  <script type="module" src="src/app.js"></script>
+</head>
+<body>
+  <div id="unsupported" class="unsupported" hidden>
+    <h1>Screen Recorder can’t run here</h1>
+    <p></p>
+  </div>
+
+  <div id="app">
+    <header class="topbar">
+      <div class="brand">
+        <svg viewBox="0 0 32 32" aria-hidden="true"><rect x="2" y="5" width="28" height="20" rx="4"/><circle cx="16" cy="15" r="5"/></svg>
+        <span>Screen Recorder</span>
+      </div>
+      <div id="status" class="status" data-state="ready" role="status">
+        <span class="dot" aria-hidden="true"></span>
+        <span id="status-text">Ready</span>
+      </div>
+    </header>
+
+    <div id="notices" class="notices" aria-live="polite"></div>
+
+    <section id="recovery" class="recovery card" hidden aria-labelledby="recovery-title">
+      <h2 id="recovery-title">Unsaved recordings found</h2>
+      <p class="muted">These were still in browser storage when the app last closed.</p>
+      <ul id="recovery-list" class="recovery-list"></ul>
+    </section>
+
+    <section id="review" class="review card" hidden aria-labelledby="review-title">
+      <div class="review-head">
+        <div>
+          <h2 id="review-title">Your recording</h2>
+          <p class="muted" id="review-summary"></p>
+        </div>
+        <div class="review-actions">
+          <button id="download-all" class="btn primary" type="button">Download</button>
+          <button id="new-recording" class="btn" type="button">New recording</button>
+        </div>
+      </div>
+      <video id="player" class="player" controls playsinline preload="metadata" aria-label="Recording preview"></video>
+      <ul id="file-list" class="file-list"></ul>
+    </section>
+
+    <main class="layout">
+      <section class="stage card" aria-label="Capture">
+        <div class="preview" id="preview-wrap">
+          <video id="preview" muted playsinline autoplay aria-label="Live preview"></video>
+
+          <div class="preview-empty" id="preview-empty">
+            <h1 id="empty-title">Choose what to record</h1>
+            <p id="empty-text">Select a screen, window or browser tab using your browser’s sharing dialog.</p>
+            <button id="select-source" class="btn primary large" type="button">Select source</button>
+            <p class="hint" id="select-hint"></p>
+          </div>
+
+          <div class="preview-note" id="preview-hidden" hidden>Preview hidden while recording</div>
+
+          <div class="countdown" id="countdown" hidden>
+            <span id="countdown-number">3</span>
+            <div class="countdown-actions">
+              <button id="countdown-skip" class="btn" type="button">Start now</button>
+              <button id="countdown-cancel" class="btn ghost on-dark" type="button">Cancel</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="source-bar" id="source-bar" hidden>
+          <span id="source-info" class="source-info"></span>
+          <span class="spacer"></span>
+          <button id="change-source" class="btn ghost small" type="button">Change source</button>
+          <button id="stop-sharing" class="btn ghost small" type="button">Stop sharing</button>
+        </div>
+
+        <div class="controls">
+          <div class="time-block">
+            <div class="timer" id="timer" aria-live="off">00:00</div>
+            <div class="rec-meta" id="rec-meta"></div>
+          </div>
+          <div class="buttons">
+            <button id="record" class="btn record" type="button" disabled>
+              <span class="rec-dot" aria-hidden="true"></span>Record
+            </button>
+            <button id="pause" class="btn" type="button" disabled>Pause</button>
+            <button id="stop" class="btn" type="button" disabled>Stop</button>
+            <button id="mute-mic" class="btn ghost" type="button" hidden aria-pressed="false">Mute mic</button>
+          </div>
+          <div class="meters" id="meters">
+            <div class="meter-row" id="mic-meter-row" hidden>
+              <span class="meter-label">Mic</span>
+              <div class="meter"><span id="mic-meter"></span></div>
+            </div>
+            <div class="meter-row" id="sys-meter-row" hidden>
+              <span class="meter-label">System</span>
+              <div class="meter"><span id="sys-meter"></span></div>
+            </div>
+          </div>
+        </div>
+        <p class="shortcuts muted">Shortcuts: <kbd>R</kbd> record · <kbd>Space</kbd> pause/resume · <kbd>S</kbd> stop</p>
+      </section>
+
+      <aside class="settings card" aria-label="Settings">
+        <fieldset id="settings" class="settings-form">
+          <section class="group">
+            <h2>Audio</h2>
+            <div class="field">
+              <label class="toggle"><input type="checkbox" data-setting="micEnabled"> <span>Microphone</span></label>
+              <span class="badge" id="mic-badge" hidden>Active</span>
+            </div>
+            <p class="sub">Narration and voice.</p>
+            <label class="stack">
+              <span class="label">Microphone device</span>
+              <select data-setting="micDeviceId" id="mic-device">
+                <option value="">Default microphone</option>
+              </select>
+            </label>
+            <div class="field">
+              <label class="toggle"><input type="checkbox" data-setting="systemAudio"> <span>System audio</span></label>
+              <span class="badge" id="sys-badge" hidden>Active</span>
+            </div>
+            <p class="sub">Best effort. Most reliable when sharing a browser tab in Chrome or Edge; Firefox and Safari usually return none. Tick “Share audio” in the browser’s dialog.</p>
+          </section>
+
+          <section class="group">
+            <h2>Quality</h2>
+            <label class="stack">
+              <span class="label">Preset</span>
+              <select data-setting="quality">
+                <option value="low">Low · 720p · 30 FPS</option>
+                <option value="standard">Standard · 1080p · 30 FPS</option>
+                <option value="high">High · native up to 4K · 60 FPS</option>
+                <option value="custom">Custom</option>
+              </select>
+            </label>
+            <div id="custom-quality" class="subgroup" hidden>
+              <div class="row">
+                <label class="stack">
+                  <span class="label">Resolution cap</span>
+                  <select data-setting="customResolution">
+                    <option value="720">720p</option>
+                    <option value="1080">1080p</option>
+                    <option value="1440">1440p</option>
+                    <option value="native">Native</option>
+                  </select>
+                </label>
+                <label class="stack">
+                  <span class="label">Frame rate</span>
+                  <select data-setting="customFps" data-type="number">
+                    <option value="15">15 FPS</option>
+                    <option value="30">30 FPS</option>
+                    <option value="60">60 FPS</option>
+                  </select>
+                </label>
+              </div>
+              <label class="stack">
+                <span class="label">Video bitrate <output id="bitrate-output">8 Mbps</output></span>
+                <input type="range" min="1" max="40" step="0.5" data-setting="customBitrateMbps" data-type="number" id="bitrate-range">
+              </label>
+            </div>
+            <p class="hint" id="quality-estimate"></p>
+            <p class="hint" id="quality-delivered"></p>
+            <p class="sub">Text and code look sharper with more resolution; video and games look smoother with a higher frame rate.</p>
+          </section>
+
+          <section class="group">
+            <h2>Format</h2>
+            <label class="stack">
+              <span class="label">File format</span>
+              <select data-setting="format" id="format-select">
+                <option value="auto">Automatic</option>
+              </select>
+            </label>
+            <p class="sub" id="format-hint">Only formats this browser can record are listed. MKV (Chromium only) suits editors that prefer H.264.</p>
+          </section>
+
+          <section class="group">
+            <h2>Split into files</h2>
+            <div class="row">
+              <label class="stack">
+                <span class="label">Split every</span>
+                <select id="split-preset">
+                  <option value="0">Off</option>
+                  <option value="30">30 seconds</option>
+                  <option value="60">1 minute</option>
+                  <option value="300">5 minutes</option>
+                  <option value="900">15 minutes</option>
+                  <option value="custom">Custom…</option>
+                </select>
+              </label>
+              <label class="stack" id="split-custom-wrap" hidden>
+                <span class="label">Seconds</span>
+                <input type="number" id="split-custom" min="10" max="3600" step="1" inputmode="numeric">
+              </label>
+            </div>
+            <label class="stack" id="split-delivery-wrap" hidden>
+              <span class="label">When each file is done</span>
+              <select data-setting="splitDelivery">
+                <option value="keep">Keep all until I stop</option>
+                <option value="download">Download it right away</option>
+              </select>
+            </label>
+          </section>
+
+          <section class="group">
+            <h2>Timer overlay</h2>
+            <label class="toggle"><input type="checkbox" data-setting="overlayEnabled"> <span>Show a time count on the video</span></label>
+            <div id="overlay-options" class="subgroup">
+              <div class="row">
+                <label class="stack">
+                  <span class="label">Corner</span>
+                  <select data-setting="overlayCorner">
+                    <option value="top-left">Top left</option>
+                    <option value="top-right">Top right</option>
+                    <option value="bottom-left">Bottom left</option>
+                    <option value="bottom-right">Bottom right</option>
+                  </select>
+                </label>
+                <label class="stack">
+                  <span class="label">Show</span>
+                  <select data-setting="overlayFormat">
+                    <option value="elapsed">Elapsed (MM:SS)</option>
+                    <option value="clock">Clock time</option>
+                    <option value="both">Both</option>
+                  </select>
+                </label>
+              </div>
+              <label class="toggle"><input type="checkbox" data-setting="overlayRestartEachFile"> <span>Restart the count in each split file</span></label>
+              <p class="sub">Burned into the video. High quality plus the overlay can be heavy on older computers.</p>
+            </div>
+          </section>
+
+          <section class="group">
+            <h2>Preview</h2>
+            <label class="toggle"><input type="checkbox" data-setting="hidePreview"> <span>Hide preview while recording</span></label>
+            <p class="sub">Saves CPU and avoids a mirror effect when recording this screen.</p>
+          </section>
+        </fieldset>
+      </aside>
+    </main>
+
+
+    <footer class="footer muted">
+      Recordings are processed and stored only on this device. Downloads go wherever your browser saves files.
+    </footer>
+  </div>
+
+  <dialog id="confirm-dialog" class="dialog">
+    <form method="dialog">
+      <p id="confirm-message"></p>
+      <div class="dialog-actions">
+        <button value="cancel" class="btn" type="submit">Cancel</button>
+        <button value="ok" class="btn danger" id="confirm-ok" type="submit">Discard</button>
+      </div>
+    </form>
+  </dialog>
+</body>
+</html>
