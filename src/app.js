@@ -145,9 +145,19 @@ async function refreshMics() {
 // Source selection and preview
 // ---------------------------------------------------------------------------
 
+/** A source is attached: preview, Record and the source controls work. */
+function canPreview(st = store.get()) {
+  return st.status === 'previewing' || (st.status === 'review' && !!st.source);
+}
+
+/** No source is attached and the app can pick one. */
+function canSelect(st = store.get()) {
+  return st.status === 'ready' || (st.status === 'review' && !st.source);
+}
+
 async function onSelectSource() {
   const st = store.get();
-  if (st.status !== 'ready') return;
+  if (!canSelect(st)) return;
   const settings = st.settings;
   // Create the AudioContext inside the click so browsers allow it to run.
   if (settings.micEnabled || settings.systemAudio) rt.mixer.ensureContext();
@@ -214,24 +224,22 @@ async function onSelectSource() {
 }
 
 function onChangeSource() {
-  const s = store.get().status;
-  if (s !== 'previewing' && s !== 'ready') return;
-  if (s === 'previewing') {
+  if (canPreview()) {
     releaseCapture();
     store.dispatch('cancelSource');
   }
-  onSelectSource(); // still inside the click, so the picker is allowed to open
+  if (canSelect()) onSelectSource(); // still inside the click, so the picker is allowed to open
 }
 
 /** Same as the System audio checkbox in Settings. Runs inside the click, so turning it on can open the picker. */
 function onToggleSystemAudio() {
   const st = store.get();
-  if (st.status !== 'previewing') return;
+  if (!canPreview(st)) return;
   onSettingsChange({ systemAudio: !st.settings.systemAudio });
 }
 
 function onStopSharing() {
-  if (store.get().status !== 'previewing') return;
+  if (!canPreview()) return;
   releaseCapture();
   store.dispatch('cancelSource');
 }
@@ -330,7 +338,7 @@ function releaseCapture() {
 
 function onSourceEnded() {
   const s = store.get().status;
-  if (s === 'previewing') {
+  if (canPreview()) {
     releaseCapture();
     store.dispatch('sourceEnded');
     ui.notice('ended', 'info', 'Sharing stopped.');
@@ -360,7 +368,7 @@ function onSettingsChange(patch) {
   const settings = sanitizeSettings(merged);
   store.set({ settings });
   saveSettings(settings);
-  if (st.status === 'previewing') applyLiveChanges(prev, settings);
+  if (canPreview(st)) applyLiveChanges(prev, settings);
 }
 
 /**
@@ -417,7 +425,7 @@ async function applyLiveChanges(prev, next) {
 
 function wouldRecordAudio() {
   const st = store.get();
-  if (st.status === 'previewing') return rt.mixer.hasSources;
+  if (canPreview(st)) return rt.mixer.hasSources;
   return st.settings.micEnabled || st.settings.systemAudio;
 }
 
@@ -466,7 +474,7 @@ async function checkQuota() {
 // ---------------------------------------------------------------------------
 
 function onRecord() {
-  if (store.get().status !== 'previewing') return;
+  if (!canPreview()) return;
   if (!store.dispatch('record')) return;
   let n = 3;
   ui.showCountdown(n);
@@ -524,8 +532,7 @@ function startRecording() {
     finishing: new Set(),
     writeFailed: false,
   };
-  rt.files.clear();
-  rt.urls.revokeAll();
+  // Earlier recordings stay listed until they're downloaded or discarded.
   rt.stopping = false;
   rt.stallSeconds = 0;
   rt.memoryWarned = false;
@@ -554,7 +561,7 @@ function startRecording() {
 /** Creates and starts the recorder for one output file. Throws if it can't start. */
 function createFile(part) {
   const ses = rt.session;
-  const file = { part, status: 'recording', incomplete: false, downloaded: false, startElapsed: rt.timer.elapsed() };
+  const file = { part, session: ses, status: 'recording', incomplete: false, downloaded: false, startElapsed: rt.timer.elapsed() };
   const rec = new FileRecorder(rt.recStream, {
     mimeType: ses.requestedMime,
     videoBitsPerSecond: ses.videoBps,
@@ -577,7 +584,7 @@ function createFile(part) {
 }
 
 async function finishFile(file, endElapsed) {
-  const ses = rt.session;
+  const ses = file.session;
   file.status = 'finalizing';
   file.durationMs = Math.max(0, endElapsed - file.startElapsed);
   publishFiles();
@@ -608,7 +615,7 @@ async function finishFile(file, endElapsed) {
     finalized: !!file.blob,
     incomplete: file.incomplete,
   });
-  saveMeta();
+  saveMeta(ses);
   publishFiles();
 
   if (file.blob && ses.split && ses.delivery === 'download') await downloadFile(file.name);
@@ -676,6 +683,10 @@ async function finalizeSession(event) {
   store.dispatch(event);
   ui.setPreview(null);
 
+  // A stop keeps the share attached so the user can record again. If the share itself
+  // ended, there is nothing left to keep.
+  const keepSource = event === 'stop' && !!rt.videoTrack && rt.videoTrack.readyState === 'live';
+
   try {
     const last = ses.current;
     ses.current = null;
@@ -683,11 +694,17 @@ async function finalizeSession(event) {
     if (last) work.push(finishFile(last, endElapsed));
     await Promise.allSettled(work);
   } finally {
-    releaseCapture();
+    if (keepSource) {
+      // The recorder used the overlay pipeline; rebuild the preview pipeline for the next take.
+      await setupVideoPipeline();
+      showLivePreview();
+    } else {
+      releaseCapture();
+    }
   }
 
   ses.meta.status = 'finalized';
-  await saveMeta();
+  await saveMeta(ses);
   const files = [...rt.files.values()];
   if (!files.some((f) => f.blob)) {
     ui.notice('finalize', 'error', 'The recording couldn’t be saved. Nothing usable was written.', [
@@ -698,7 +715,10 @@ async function finalizeSession(event) {
     return;
   }
   store.dispatch('finalized');
-  const first = files.sort((a, b) => a.part - b.part).find((f) => f.blob);
+  // Play the take that just finished, not an older one still in the list.
+  const first = files
+    .filter((f) => f.session === ses && f.blob)
+    .sort((a, b) => a.part - b.part)[0];
   if (first) onPlay(first.name);
 }
 
@@ -806,8 +826,7 @@ function onTick() {
   }
 }
 
-async function saveMeta() {
-  const ses = rt.session;
+async function saveMeta(ses = rt.session) {
   rt.lastMetaSave = nowAbs();
   if (!ses?.meta || rt.storage?.kind !== 'opfs') return;
   if (ses.metaSaving) {
@@ -827,7 +846,7 @@ async function saveMeta() {
     ses.metaSaving = false;
     if (ses.metaDirty) {
       ses.metaDirty = false;
-      saveMeta();
+      saveMeta(ses);
     }
   }
 }
@@ -899,38 +918,22 @@ async function onDiscard(name) {
 }
 
 async function removeFile(name) {
-  const ses = rt.session;
+  const f = rt.files.get(name);
   if (ui.selectedFile === name) {
     rt.urls.revoke('player');
     ui.setPlayer(null, null);
   }
   rt.files.delete(name);
+  const ses = f?.session;
   if (ses?.meta) recovery.updateFile(ses.meta, name, { discarded: true });
   publishFiles();
   if (ses) {
     await rt.storage.deleteFile(ses.id, name).catch(() => {});
-    await saveMeta();
+    await saveMeta(ses);
   }
 }
 
-async function onNewRecording() {
-  if (store.get().status !== 'review') return;
-  const undownloaded = [...rt.files.values()].filter((f) => f.blob && !f.downloaded);
-  if (undownloaded.length) {
-    const n = undownloaded.length;
-    const ok = await ui.confirm(
-      n === 1
-        ? 'One file hasn’t been downloaded. Discard it and start a new recording?'
-        : `${n} files haven’t been downloaded. Discard them and start a new recording?`,
-    );
-    if (!ok) return;
-    for (const f of undownloaded) await removeFile(f.name);
-  }
-  finishSessionCleanup();
-  store.dispatch('newRecording');
-}
-
-/** Clears the review. Downloaded files are deleted from storage on the next app start. */
+/** Clears the session once every recording has been discarded. Downloaded files are deleted from storage on the next app start. */
 function finishSessionCleanup() {
   const ses = rt.session;
   rt.urls.revokeAll();
@@ -992,6 +995,7 @@ async function onRecover(id) {
   const mime = meta.mimeType || '';
   rt.files.clear();
   rt.urls.revokeAll();
+  const ses = { id: meta.id, base: meta.id, meta, split: meta.files.length > 1, recovered: true, finishing: new Set() };
   for (const f of recovery.pendingFiles(meta, sizes)) {
     let blob = null;
     try {
@@ -1004,6 +1008,7 @@ async function onRecover(id) {
     rt.files.set(f.name, {
       name: f.name,
       part: f.part,
+      session: ses,
       mimeType: mime,
       ext: extensionForMime(mime),
       blob,
@@ -1014,7 +1019,7 @@ async function onRecover(id) {
       downloaded: false,
     });
   }
-  rt.session = { id: meta.id, base: meta.id, meta, split: meta.files.length > 1, recovered: true, finishing: new Set() };
+  rt.session = ses;
   dropPending(id);
   publishFiles();
   store.dispatch('recover');
@@ -1075,7 +1080,7 @@ function onKeyDown(e) {
   if (!shortcutTarget(e)) return;
   const s = store.get().status;
   const key = e.key.toLowerCase();
-  if (key === 'r' && s === 'previewing') {
+  if (key === 'r' && canPreview()) {
     e.preventDefault();
     onRecord();
   } else if (e.code === 'Space' && isCapturing(s)) {
@@ -1111,7 +1116,6 @@ const handlers = {
   onDownload: (name) => downloadFile(name),
   onDiscard,
   onDownloadAll,
-  onNewRecording,
   onRecover,
   onRecoverDownload,
   onRecoverDelete,
