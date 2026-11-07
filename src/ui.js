@@ -147,9 +147,15 @@ export class UI {
     $('source-bar').hidden = !hasSource;
     $('change-source').disabled = s !== 'previewing';
     const sysOn = !!state.settings?.systemAudio;
-    $('toggle-system-audio').disabled = s !== 'previewing';
-    $('toggle-system-audio').textContent = sysOn ? 'System audio: on' : 'System audio: off';
-    $('toggle-system-audio').setAttribute('aria-pressed', String(sysOn));
+    // Audio was requested but the browser didn't share any for this source: grey the button out.
+    const audioMissing = sysOn && !state.hasSystemAudio;
+    const sysBtn = $('toggle-system-audio');
+    sysBtn.disabled = s !== 'previewing' || audioMissing;
+    sysBtn.textContent = audioMissing ? 'System audio: not shared' : sysOn ? 'System audio: on' : 'System audio: off';
+    sysBtn.title = audioMissing
+      ? 'This source didn’t share audio. Choose the source again and tick “Share audio” in the browser’s dialog.'
+      : 'Turning this on asks you to pick the source again so the browser can share its audio';
+    sysBtn.setAttribute('aria-pressed', String(sysOn));
     $('stop-sharing').disabled = s !== 'previewing';
     $('source-info').textContent = this._sourceText(state);
 
