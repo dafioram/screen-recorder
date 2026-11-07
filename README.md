@@ -49,7 +49,7 @@ After you deploy, Pages may serve cached files for about 10 minutes, so reload o
 ## Using it
 
 1. Choose your options on the right: microphone, system audio, quality, format, splitting and the timer overlay.
-2. Click **Select source** and pick what to share in the browser's dialog. To capture system audio, tick **Share audio** there.
+2. Click **Select source** and pick what to share in the browser's dialog. System audio is on by default, so tick **Share audio** there. You can change it during a preview: turning it on reopens the dialog so you can pick the source again, and turning it off stops mixing it in straight away.
 3. Check the preview, then press **Record**. A 3-2-1 countdown runs first; **Start now** skips it.
 4. **Pause** and **Stop** as needed. If you stop sharing from the browser's own bar, the recording is saved safely.
 5. In the review panel, play, download or discard each file. **New recording** starts over.

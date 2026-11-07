@@ -356,7 +356,24 @@ function onSettingsChange(patch) {
   if (st.status === 'previewing') applyLiveChanges(prev, settings);
 }
 
+/**
+ * System audio arrives with the shared source, so it can't be added to a live preview.
+ * Turning it on reopens the picker (this runs inside the checkbox's change event, so the
+ * browser allows it). Turning it off drops the track from the mix straight away.
+ */
+function applySystemAudioChange(enabled) {
+  if (enabled) {
+    onChangeSource();
+    return true;
+  }
+  rt.mixer.removeSource('system');
+  store.set({ hasSystemAudio: false });
+  return false;
+}
+
 async function applyLiveChanges(prev, next) {
+  if (prev.systemAudio !== next.systemAudio && applySystemAudioChange(next.systemAudio)) return;
+
   const qualityChanged = ['quality', 'customResolution', 'customFps'].some((k) => prev[k] !== next[k]);
   const overlayToggled = prev.overlayEnabled !== next.overlayEnabled;
   const styleChanged = prev.overlayCorner !== next.overlayCorner || prev.overlayFormat !== next.overlayFormat;
@@ -388,11 +405,6 @@ async function applyLiveChanges(prev, next) {
     await enableMic();
   }
 
-  if (prev.systemAudio !== next.systemAudio) {
-    ui.notice('sys-change', 'info', 'The system audio setting applies the next time you choose a source.', [
-      { label: 'Choose source again', action: onChangeSource },
-    ]);
-  }
   if (qualityChanged) checkQuota();
 }
 

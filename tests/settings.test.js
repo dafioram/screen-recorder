@@ -17,6 +17,14 @@ test('missing or broken storage gives defaults', () => {
   assert.equal(saveSettings(DEFAULT_SETTINGS, throwing), false);
 });
 
+test('system audio is on by default, and a saved choice still wins', () => {
+  assert.equal(DEFAULT_SETTINGS.systemAudio, true);
+  assert.equal(loadSettings(memoryStorage()).systemAudio, true);
+  const s = memoryStorage();
+  s.setItem(SETTINGS_KEY, JSON.stringify({ systemAudio: false }));
+  assert.equal(loadSettings(s).systemAudio, false);
+});
+
 test('save and load round trip', () => {
   const s = memoryStorage();
   const custom = { ...DEFAULT_SETTINGS, quality: 'high', format: 'mkv', splitSeconds: 300, overlayEnabled: true, overlayCorner: 'top-left', micEnabled: true, micDeviceId: 'abc' };

@@ -18,7 +18,7 @@ export const DEFAULT_SETTINGS = Object.freeze({
   hidePreview: false,
   micEnabled: false,
   micDeviceId: '',
-  systemAudio: false,
+  systemAudio: true,
 });
 
 const ENUMS = {
