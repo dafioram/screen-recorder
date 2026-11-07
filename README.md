@@ -49,10 +49,10 @@ After you deploy, Pages may serve cached files for about 10 minutes, so reload o
 ## Using it
 
 1. Choose your options on the right: microphone, system audio, quality, format, splitting and the timer overlay.
-2. Click **Select source** and pick what to share in the browser's dialog. To capture system audio, tick **Share audio** there.
+2. Click **Select source** and pick what to share in the browser's dialog. System audio is on by default, so tick **Share audio** there. You can change it during a preview: turning it on reopens the dialog so you can pick the source again, and turning it off stops mixing it in straight away.
 3. Check the preview, then press **Record**. A 3-2-1 countdown runs first; **Start now** skips it.
 4. **Pause** and **Stop** as needed. If you stop sharing from the browser's own bar, the recording is saved safely.
-5. In the review panel, play, download or discard each file. **New recording** starts over.
+5. Stopping keeps the source attached, so you can press **Record** again straight away. Each finished recording stays in the review panel until you play, download or discard it. Recordings from earlier takes stay there too. If the source is gone, choose **Select source** to record again.
 
 Keyboard shortcuts (while the page has focus and you're not typing in a field): **R** record, **Space** pause/resume, **S** stop, **Esc** cancel the countdown.
 
@@ -176,7 +176,8 @@ Run through these in each browser you support (Chrome or Edge, Firefox, and Safa
 - [ ] With a 30 s split, a 3 min 10 s recording gives 7 files: six of about 30 s and one of about 10 s.
 - [ ] No visible gap between consecutive split files in Chrome or Edge.
 - [ ] "Download it right away" downloads each split file as it finishes.
-- [ ] Discard asks for confirmation; New recording warns about files not yet downloaded.
+- [ ] Stop, then Record again with the same source: the earlier recording stays listed and the new one plays after it finishes.
+- [ ] Discard asks for confirmation.
 - [ ] Leaving the page with undownloaded files shows the browser's leave-page warning.
 
 **Overlay**

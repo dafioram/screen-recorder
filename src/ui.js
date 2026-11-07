@@ -47,6 +47,7 @@ export class UI {
     const h = this.h;
     $('select-source').addEventListener('click', () => h.onSelectSource());
     $('change-source').addEventListener('click', () => h.onChangeSource());
+    $('toggle-system-audio').addEventListener('click', () => h.onToggleSystemAudio());
     $('stop-sharing').addEventListener('click', () => h.onStopSharing());
     $('record').addEventListener('click', () => h.onRecord());
     $('pause').addEventListener('click', () => h.onPauseToggle());
@@ -55,7 +56,6 @@ export class UI {
     $('countdown-skip').addEventListener('click', () => h.onSkipCountdown());
     $('countdown-cancel').addEventListener('click', () => h.onCancelCountdown());
     $('download-all').addEventListener('click', () => h.onDownloadAll());
-    $('new-recording').addEventListener('click', () => h.onNewRecording());
 
     const form = $('settings');
     form.addEventListener('change', (e) => this._onSettingChange(e));
@@ -140,21 +140,34 @@ export class UI {
     $('status-text').textContent = STATUS_LABELS[s] ?? s;
 
     // Stage
-    const hasSource = s === 'previewing' || s === 'countdown' || isCapturing(s);
+    // A source stays attached after a recording (review), so the preview and controls stay usable.
+    const live = s === 'previewing' || (s === 'review' && !!state.source);
+    const hasSource = live || s === 'countdown' || isCapturing(s);
+    const canSelect = s === 'ready' || (s === 'review' && !state.source);
     $('preview-empty').hidden = hasSource || s === 'finalizing';
-    $('select-source').disabled = s !== 'ready';
+    $('select-source').disabled = !canSelect;
     $('source-bar').hidden = !hasSource;
-    $('change-source').disabled = s !== 'previewing';
-    $('stop-sharing').disabled = s !== 'previewing';
+    $('change-source').disabled = !live;
+    const sysOn = !!state.settings?.systemAudio;
+    // Audio was requested but the browser didn't share any for this source: grey the button out.
+    const audioMissing = sysOn && !state.hasSystemAudio;
+    const sysBtn = $('toggle-system-audio');
+    sysBtn.disabled = !live || audioMissing;
+    sysBtn.textContent = audioMissing ? 'System audio: not shared' : sysOn ? 'System audio: on' : 'System audio: off';
+    sysBtn.title = audioMissing
+      ? 'This source didn’t share audio. Choose the source again and tick “Share audio” in the browser’s dialog.'
+      : 'Turning this on asks you to pick the source again so the browser can share its audio';
+    sysBtn.setAttribute('aria-pressed', String(sysOn));
+    $('stop-sharing').disabled = !live;
     $('source-info').textContent = this._sourceText(state);
 
     // Controls
-    $('record').disabled = s !== 'previewing';
+    $('record').disabled = !live;
     $('pause').disabled = !isCapturing(s) || !state.canPause;
     $('pause').textContent = s === 'paused' ? 'Resume' : 'Pause';
     $('pause').title = state.canPause ? '' : 'This browser can’t pause recordings';
     $('stop').disabled = !isCapturing(s);
-    const showMute = state.micActive && (s === 'previewing' || isCapturing(s));
+    const showMute = state.micActive && (live || isCapturing(s));
     $('mute-mic').hidden = !showMute;
     $('mute-mic').textContent = state.micMuted ? 'Unmute mic' : 'Mute mic';
     $('mute-mic').setAttribute('aria-pressed', String(!!state.micMuted));
@@ -173,17 +186,19 @@ export class UI {
     $('settings').disabled = busy;
     this._renderSettings(state);
 
-    // Review
-    const inReview = s === 'review';
-    $('empty-title').textContent = inReview ? 'Recording finished' : 'Choose what to record';
-    $('empty-text').textContent = inReview
-      ? 'Play, download or discard it above, then choose New recording to start again.'
+    // Review: finished recordings stay listed until they're downloaded or discarded. The list is
+    // hidden while a take is being recorded or saved, so the page doesn't jump during capture.
+    const hasRecordings = state.files.length > 0;
+    const showReview = hasRecordings && !isCapturing(s) && s !== 'finalizing';
+    const recordAgain = hasRecordings && !state.source;
+    $('empty-title').textContent = recordAgain ? 'Record again' : 'Choose what to record';
+    $('empty-text').textContent = recordAgain
+      ? 'Play, download or discard your recordings above, or select a source to record again.'
       : 'Select a screen, window or browser tab using your browser’s sharing dialog.';
-    $('select-source').hidden = inReview;
-    $('select-hint').hidden = inReview;
+    $('select-hint').hidden = hasRecordings;
     const wasHidden = $('review').hidden;
-    $('review').hidden = !inReview;
-    if (inReview && wasHidden) $('review').scrollIntoView({ block: 'start', behavior: 'smooth' });
+    $('review').hidden = !showReview;
+    if (showReview && wasHidden) $('review').scrollIntoView({ block: 'start', behavior: 'smooth' });
     if (state.files !== this.lastFiles) {
       this.lastFiles = state.files;
       this._renderFiles(state.files);
