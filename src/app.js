@@ -223,6 +223,13 @@ function onChangeSource() {
   onSelectSource(); // still inside the click, so the picker is allowed to open
 }
 
+/** Same as the System audio checkbox in Settings. Runs inside the click, so turning it on can open the picker. */
+function onToggleSystemAudio() {
+  const st = store.get();
+  if (st.status !== 'previewing') return;
+  onSettingsChange({ systemAudio: !st.settings.systemAudio });
+}
+
 function onStopSharing() {
   if (store.get().status !== 'previewing') return;
   releaseCapture();
@@ -1091,6 +1098,7 @@ function onKeyUp(e) {
 const handlers = {
   onSelectSource,
   onChangeSource,
+  onToggleSystemAudio,
   onStopSharing,
   onRecord,
   onPauseToggle,

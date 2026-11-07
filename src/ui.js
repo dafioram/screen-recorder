@@ -47,6 +47,7 @@ export class UI {
     const h = this.h;
     $('select-source').addEventListener('click', () => h.onSelectSource());
     $('change-source').addEventListener('click', () => h.onChangeSource());
+    $('toggle-system-audio').addEventListener('click', () => h.onToggleSystemAudio());
     $('stop-sharing').addEventListener('click', () => h.onStopSharing());
     $('record').addEventListener('click', () => h.onRecord());
     $('pause').addEventListener('click', () => h.onPauseToggle());
@@ -145,6 +146,10 @@ export class UI {
     $('select-source').disabled = s !== 'ready';
     $('source-bar').hidden = !hasSource;
     $('change-source').disabled = s !== 'previewing';
+    const sysOn = !!state.settings?.systemAudio;
+    $('toggle-system-audio').disabled = s !== 'previewing';
+    $('toggle-system-audio').textContent = sysOn ? 'System audio: on' : 'System audio: off';
+    $('toggle-system-audio').setAttribute('aria-pressed', String(sysOn));
     $('stop-sharing').disabled = s !== 'previewing';
     $('source-info').textContent = this._sourceText(state);
 
